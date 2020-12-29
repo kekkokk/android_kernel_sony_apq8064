@@ -102,6 +102,10 @@
 /* Wake locking time after charger unplugged */
 #define UNPLUG_WAKELOCK_TIME_SEC (2 * HZ)
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
+#include <linux/fastchg.h>
+#endif
+
 enum chg_fsm_state {
 	FSM_STATE_OFF_0 = 0,
 	FSM_STATE_BATFETDET_START_12 = 12,
@@ -2330,6 +2334,7 @@ static void notify_usb_of_the_plugin_event(int plugin)
 	}
 }
 
+// This will set the final draw power
 static void __pm8921_charger_vbus_draw(unsigned int mA)
 {
 	int i, rc;
@@ -2337,6 +2342,8 @@ static void __pm8921_charger_vbus_draw(unsigned int mA)
 		pr_err("called before init\n");
 		return;
 	}
+
+	pr_debug("[PWR] Called charger_vbus_draw with %d\n", mA);
 
 	if (usb_max_current && mA > usb_max_current) {
 		pr_debug("restricting usb current to %d instead of %d\n",
@@ -2374,7 +2381,42 @@ static void __pm8921_charger_vbus_draw(unsigned int mA)
 			i--;
 		if (i < 0)
 			i = 0;
+#ifdef CONFIG_FORCE_FAST_CHARGE
+		if (force_fast_charge == 1) {
+			i = 10;
+			pr_debug("[PWR] Force fast charge enabled, setting i = %d\n", i);
+		} else if (force_fast_charge == 2) {
+			switch (fast_charge_level) {
+				case FAST_CHARGE_500:
+					i = 2;
+					break;
+				case FAST_CHARGE_700:
+					i = 4;
+					break;
+				case FAST_CHARGE_900:
+					i = 8;
+					break;
+				case FAST_CHARGE_1100:
+					i = 10;
+					break;
+				case FAST_CHARGE_1300:
+					i = 12;
+					break;
+				case FAST_CHARGE_1500:
+					i = 14;
+					break;
+				default:
+					break;
+			}
+			pr_debug("[PWR] Force fast charge enabled with custom level: %d\n", usb_ma_table[i].usb_ma);
+		} else {
+			pr_debug("[PWR] Force fast charge disabled\n");
+		}
 		rc = pm_chg_iusbmax_set(the_chip, i);
+		pr_info("Setting charge curent index corresponding to %u mA => %d\n", mA, i);
+#else
+		rc = pm_chg_iusbmax_set(the_chip, i);
+#endif		
 		if (rc)
 			pr_err("unable to set iusb to %d rc = %d\n", i, rc);
 	}
@@ -2430,8 +2472,10 @@ static void pm8921_charger_vbus_draw_local(
 	if (the_chip && the_chip->disable_aicl)
 		set_usb_now_ma = mA;
 
-	if (the_chip)
+	if (the_chip) {
+		pr_debug("[PWR] calling __pm8921_charger_vbus_draw from pm8921_charger_vbus_draw_local");
 		__pm8921_charger_vbus_draw(set_usb_now_ma);
+	}
 	else
 		/*
 		 * called before pmic initialized,
@@ -3044,6 +3088,7 @@ static void vin_collapse_check_worker(struct work_struct *work)
 		/* decrease usb_target_ma */
 		decrease_usb_ma_value(&usb_target_ma);
 		/* reset here, increase in unplug_check_worker */
+		pr_debug("[PWR] calling __pm8921_charger_vbus_draw from vin_collapse_check_worker");
 		__pm8921_charger_vbus_draw(USB_WALL_THRESHOLD_MA);
 		pr_debug("usb_now=%d, usb_target = %d\n",
 				USB_WALL_THRESHOLD_MA, usb_target_ma);
@@ -3525,6 +3570,7 @@ static void unplug_check_worker(struct work_struct *work)
 			chip->vbus_collapse.collapsing = true;
 			usb_target_ma = usb_ma;
 			/* end AICL here */
+			pr_debug("[PWR] calling __pm8921_charger_vbus_draw from unplug_check_worker 1");
 			__pm8921_charger_vbus_draw(usb_ma);
 			pr_debug("usb_now=%d, usb_target = %d\n",
 				usb_ma, usb_target_ma);
@@ -3575,6 +3621,7 @@ static void unplug_check_worker(struct work_struct *work)
 			increase_usb_ma_value(&usb_ma);
 			if (usb_ma > usb_target_ma)
 				usb_ma = usb_target_ma;
+			pr_debug("[PWR] calling __pm8921_charger_vbus_draw from unplug_check_worker 2");
 			__pm8921_charger_vbus_draw(usb_ma);
 			pr_debug("usb_now=%d, usb_target = %d\n",
 					usb_ma, usb_target_ma);
@@ -4585,6 +4632,7 @@ static int set_usb_max_current(const char *val, struct kernel_param *kp)
 	}
 	if (chip) {
 		pr_warn("setting current max to %d\n", usb_max_current);
+		pr_debug("[PWR] calling __pm8921_charger_vbus_draw from set_usb_max_current");
 		pm8921_charger_vbus_draw_local(SRC_ID_THERMAL, usb_max_current);
 		return 0;
 	}

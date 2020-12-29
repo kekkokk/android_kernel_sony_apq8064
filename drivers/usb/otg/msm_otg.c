@@ -56,6 +56,10 @@
 #include <mach/msm_bus.h>
 #include <mach/rpm-regulator.h>
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
+#include <linux/fastchg.h>
+#endif
+
 #ifdef CONFIG_USB_HOST_EXTRA_NOTIFICATION
 #include <linux/usb/host_ext_event.h>
 #endif
@@ -1176,6 +1180,13 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 			"Failed notifying %d charger type to PMIC\n",
 							motg->chg_type);
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
+	// no matter what type of charger is being detected
+	// set chip max charge current
+	if (force_fast_charge > 0)
+		mA = IDEV_ACA_CHG_MAX;
+#endif
+
 	if (motg->cur_power == mA)
 		return;
 
@@ -1185,8 +1196,12 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 	 *  Use Power Supply API if supported, otherwise fallback
 	 *  to legacy pm8921 API.
 	 */
-	if (msm_otg_notify_power_supply(motg, mA))
+	if (msm_otg_notify_power_supply(motg, mA)) {
+		dev_dbg(motg->phy.dev, "[PWR] Power supply API supported");
 		pm8921_charger_vbus_draw(mA);
+	} else {
+		dev_dbg(motg->phy.dev, "[PWR] Power supply API not supported");
+	}
 
 	motg->cur_power = mA;
 }
