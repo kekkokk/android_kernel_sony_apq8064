@@ -1,0 +1,32 @@
+siMpoKe Kernel (Simple Modified Pollux Kernel)
+- pollux (Sony Xperia Tablet Z LTE)
+- pollux_windy (Sony Xperia Tablet Z WiFi)
+
+[POWER]
+
+The default power behavior of the stock lineage 15.1 kernel is simple:
+Fast charge is enabled, only with few caveats:
+- It ask the power management to give the max power (1500mA)
+- The msm_otg disconnect watchdog listen for any "link" disconnection
+- At every disconnection it decrease the current asked and starts a task to try to increase the power in an exponetial time manner
+
+This way, your current may vary: for example, with a slim usb cable I could only get 1100mA or with an old charger only 900mA
+
+With this tweak, from any Kernel manager os sysfs you can FORCE the fastcharge feature.
+The default behavior is to force to 1500mA but you can also specify a specific value with the sysfs interface.
+
+[BUILD OPTIMIZATION]
+
+Thanks to the awesome miPa kernel, few flags are forwarded to the build toolchain to optimize this chip.
+
+[BUILD TOOLS]
+
+- Linaro GCC Toolchain v5 [https://releases.linaro.org/components/toolchain/binaries/latest-5/arm-eabi/gcc-linaro-5.5.0-2017.10-x86_64_arm-eabi.tar.xz]
+- unmkbootimg [https://forum.xda-developers.com/t/util-unmkbootimg.1877807/] to unpack stock initram and kernel from boot.img
+- mkbootimg [https://github.com/osm0sis/mkbootimg/releases/tag/2020.05.18] to repack the bootimg following the unmkbootimg suggested steps
+
+[LINKS]
+- MotoX force fast charge patch [https://gerrit.aicp-rom.com/c/AICP/kernel_motorola_msm8960dt-common/+/2058]
+- miPa kernel [https://forum.xda-developers.com/t/kernel-8-1-9-0-mipa-kernel-pollux-pollux_windy-2020-10-07.3839726/]
+
+author @kekkokk
